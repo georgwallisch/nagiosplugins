@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# $Id: check_printer_supply_status.pl / Version 0.2 / 2016-06-20 22:20 / gw@phpco.de
+# $Id: check_printer_supply_status / Version 0.2 / 2016-06-20 22:20 / gw@phpco.de
 #
 # Copyright (C) 2016 Georg Wallisch
 #

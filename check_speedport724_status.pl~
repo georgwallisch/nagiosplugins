@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# $Id: check_speedport724_status.pl / Version 0.1 / 2016-05-11 23:39 / gw@phpco.de
+# $Id: check_speedport724_status / Version 0.1 / 2016-05-11 23:39 / gw@phpco.de
 #
 # Copyright (C) 2016 Georg Wallisch
 #
