@@ -26,6 +26,7 @@
 #
 # 0.1 - xx.xx.2016 - First testing version
 # 0.2 - 20.06.2016 - rewritten using Monitoring::Plugin
+# 0.3 - 10.10.2017 - added support for brother printers
 #
 
 $ENV{'PATH'}='';
@@ -34,9 +35,10 @@ $ENV{'ENV'}='';
 
 use POSIX;
 use warnings;
-use strict;
+#use strict;
 
 use Monitoring::Plugin qw(%ERRORS);
+#use Monitoring::Plugin;
 use Net::SNMP;
 
 # define SNMP OIDs
@@ -183,19 +185,30 @@ if ($np->opts->verbose) {
 
 my $status;
 my $uom;
+my $code = UNKNOWN;
 
 if($capacity > 0 and $used <= $capacity) {
 	printf "Calculation status as percentage by used and capacity values.\n\n" if ($np->opts->verbose);
 	$status = (100*$used/$capacity);
 	$uom = "%";
+	$code = $np->check_threshold($status);
 } else {
-	printf "No Capacity value found, thus we only know an absolute pages value.\n\n" if ($np->opts->verbose);
+	printf "The component does not have a measurable status indication.\n\n" if ($np->opts->verbose);
+	if($used == -3) {
+		# A value of (-3) means that the printer knows that there is some supply/remaining space
+		$code = OK;		
+	} elsif($used == -2) {
+		# The value (-2) means unknown
+		$code = WARNING;	
+	} elsif($used == 0) {
+		# Something is empty!
+		$code = CRITICAL;
+	} else {
+		printf "No Capacity value found, thus we only know an absolute pages value.\n\n" if ($np->opts->verbose);
+	}
 	$status = $used;
 	$uom = '';
 }
-
-my $code = $np->check_threshold($status);
-
 
 # Writing Performance-Data
 $np->add_perfdata(
