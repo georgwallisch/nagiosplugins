@@ -157,7 +157,7 @@ if($np->opts->list) {
 
 $i = undef;
 
-$np->plugin_die("No supply value given!") unless (defined $supply and $supply != "");
+$np->plugin_die("No supply value given!") unless (defined $supply and $supply ne "");
 
 for $item (@valuelist) {
 	if($item->{value} =~ /$supply/i) {
