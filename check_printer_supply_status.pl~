@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# $Id: check_printer_supply_status.pl / Version 0.5 / 2017-10-12 / gw@phpco.de
+# $Id: check_printer_supply_status.pl / Version 0.2 / 2016-06-20 22:20 / gw@phpco.de
 #
 # Copyright (C) 2016 Georg Wallisch
 #
@@ -28,7 +28,6 @@
 # 0.2 - 20.06.2016 - rewritten using Monitoring::Plugin
 # 0.3 - 10.10.2017 - added support for brother printers
 # 0.4 - 11.10.2017 - added rounding of calculated result
-# 0.5 - 12.10.2017 - some fixes
 #
 
 $ENV{'PATH'}='';
@@ -157,8 +156,6 @@ if($np->opts->list) {
 
 $i = undef;
 
-$np->plugin_die("No supply value given!") unless (defined $supply and $supply != "");
-
 for $item (@valuelist) {
 	if($item->{value} =~ /$supply/i) {
 		$i = $item->{i};
@@ -189,9 +186,9 @@ if ($np->opts->verbose) {
 
 my $status;
 my $uom;
-my $code;
+my $code = UNKNOWN;
 
-if($capacity > 0 and $used >= 0 and $used <= $capacity) {
+if($capacity > 0 and $used <= $capacity) {
 	printf "Calculation status as percentage by used and capacity values.\n\n" if ($np->opts->verbose);
 	$status = nearest(.1, (100*$used/$capacity));
 	$uom = "%";
@@ -207,12 +204,8 @@ if($capacity > 0 and $used >= 0 and $used <= $capacity) {
 	} elsif($used == 0) {
 		# Something is empty!
 		$code = CRITICAL;
-	} elsif($used > 0) {
-		printf "No Capacity value found, thus we only know an absolute pages value.\n\n" if ($np->opts->verbose);
-		$code = $np->check_threshold($used);
 	} else {
-		printf "Used value does not make sense at all.\n\n" if ($np->opts->verbose);
-		$code = UNKNOWN;
+		printf "No Capacity value found, thus we only know an absolute pages value.\n\n" if ($np->opts->verbose);
 	}
 	$status = $used;
 	$uom = '';
