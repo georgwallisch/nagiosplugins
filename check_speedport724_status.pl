@@ -290,7 +290,7 @@ sub listvars() {
 
 sub usage () {
 	printf "\n";
-	printf "USAGE: $PROGRAMNAME [-H <hostname>] -a <action>\n\n";
+	printf "USAGE: $PROGRAMNAME [-H <hostname>] -v <variable>\n\n";
 	printf "$PROGRAMNAME $VERSION\n";
 	printf "$COPYR $AUTHOR\n";
 	printf "This programm comes with ABSOLUTELY NO WARRANTY\n";
