@@ -29,7 +29,7 @@
 #
 # -----------------------------------------------
 
-use strict;
+#use strict;
 use warnings;
 use POSIX qw(strftime);
 
@@ -37,23 +37,24 @@ use Monitoring::Plugin qw(%ERRORS);
 use Math::Round qw(nearest);
 use RRDs;
 
-# Constructor of core monitoring object
+# -- Constructor of core monitoring object
 my $np = Monitoring::Plugin->new(
-	usage => "Usage: %s -R rrd_file --ds data_source [--cf CF] [-v] \
-             [--start timespec] [--end timespec] [--resolution seconds] \
-	     [--compute MAX|MIN|AVERAGE|PERCENT] \
-	     [--na-value-returncode OK|WARNING|ERROR|UNKNOWN] \
-	     [--text-label label] [--performance-label label]
-	     [--clip-warn-level percent] [--clip-crit-level percent] \
-             [-w warning_threshold] [-c critical_threshold]
- check_rrd.pl -R rrd_file --info
- check_rrd.pl -R rrd_file --age [-w warning_threshold] [-c critical_threshold]
- check_rrd.pl [-h|-V]",
+	usage => "Usage: \
+ %s -R rrd_file --ds data_source [--cf CF] [-v] \
+	[--start timespec] [--end timespec] [--resolution seconds] \
+	[--compute MAX|MIN|AVERAGE|PERCENT] \
+	[--na-value-returncode OK|WARNING|ERROR|UNKNOWN] \
+	[--text-label label] [--performance-label label]
+	[--clip-warn-level percent] [--clip-crit-level percent] \
+	[-w warning_threshold] [-c critical_threshold]
+ %s -R rrd_file --info
+ %s -R rrd_file --age [-w warning_threshold] [-c critical_threshold]
+ %s [-h|-V]",
 	version => '1.1',
 	blurb => 'Nagios plugin for checking data and and age of rrd files',
 	);
 
-# add options
+# -- add options
 $np->add_arg(
 	spec => 'rrdfile|R=s',
 	help => 'Path to RRD file - (required). ',
@@ -62,8 +63,6 @@ $np->add_arg(
 $np->add_arg(
 	spec => 'ds=s',
 	help => 'Select data source (DS) from rrd file.',
-	#default => '',
-	required => 1,
 	);
 $np->add_arg(
 	spec => 'cf=s',
@@ -83,10 +82,12 @@ $np->add_arg(
 $np->add_arg(
 	spec => 'resolution|i',
 	help => 'Specify a time resolution, this means try to select the round robin archives with the matching time resolution. The resolution has to be specified in seconds, not primary data points. This options goes transparently to rrdfetch. For more information see man rrdfetch and take care of the hint in the manpage especially on the dependency between resolution and time interval.',
+	default => 1,
 	);
 $np->add_arg(
-	spec => 'na-value-returncode=s',
+	spec => 'na_values_returncode|na-value-returncode=s',
 	help => 'Some times there is no valid value in the fetched data from rrd file. --na-value-returncode specifies how to proceed this value. If one value is not available, --compute=MIN|MAX|AVERAGE exits with the specified value (default: CRITICAL). If --compute=PERCENT, this single value is treated as one single OK|WARNING|CRITICAL, the result depends on the percents of good or bad values. UNKNOWN make no sense with --compute=PERCENT.',
+	default => 'CRITICAL',
 	);
 $np->add_arg(
 	spec => 'compute=s',
@@ -102,18 +103,17 @@ $np->add_arg(
 	returns OK. If the matching good values are between 70 and 50 percent, the \
 	plugin returns a WARNING, an CRITICAL, if less then 50 percent of the\ 
 	observed values are OK.',
+	default => 'AVERAGE',
 	);
 $np->add_arg(
-	spec => 'na-value-returncode=s',
-	help => 'Some times there is no valid value in the fetched data from rrd file. --na-value-returncode specifies how to proceed this value. If one value is not available, --compute=MIN|MAX|AVERAGE exits with the specified value (default: CRITICAL). If --compute=PERCENT, this single value is treated as one single OK|WARNING|CRITICAL, the result depends on the percents of good or bad values. UNKNOWN make no sense with --compute=PERCENT.',
-	);
-$np->add_arg(
-	spec => 'clip-warn-level=i',
+	spec => 'clip_warn_level|clip-warn-level=i',
 	help => 'Clip-Level for use with --compute=PERCENT. The Level has to specified in threshold format. Example 70 or 0:70 means, check_rrd.pl returns OK, if more than 70% of the returned values are ok, and WARNING, if less than 70% are OK related to the specified boundaries in --warning and --critical.',
+	default => 100,
 	);
 $np->add_arg(
-	spec => 'clip-crit-level=i',
+	spec => 'clip_crit_level|clip-crit-level=i',
 	help => 'See --clip-warn-level',
+	default => 100,
 	);
 $np->add_arg(
 	spec => 'info',
@@ -131,39 +131,27 @@ $np->add_arg(
 	spec => 'critical|c=s',
 	help => 'Warning Threshold. See https://www.monitoring-plugins.org/doc/guidelines.html#THRESHOLDFORMAT for the threshold format. ',
 	);
+$np->add_arg(
+	spec => 'debug',
+	help => 'Enable Debug mode.',
+	default => 0,
+	);
 
-# Parse and process arguments
+# -- Parse and process arguments
 $np->getopts;
 
 # -----------------------------------------------
 # vars vars
 # -----------------------------------------------
 
-my $rrdfile = '';
-my $rra_cf = '';
-my $datasource = '';
+my $rrdfile = $np->opts->rrdfile;
+my $mode = ''; # cf|age|info
+my $mode_count = 0;		# count of specified possible mode, only 0 or 1 is allowed;
+my $debug = $np->opts->debug;
 my $ds_index = -1;
-my $start_time = '-1h';
-my $end_time = 'now';
-my $rra_resolution = 1;	# 1 = maximum resolution
-my $na_values_returncode = 'CRITICAL';
-my $compute = 'AVERAGE';
-my $clip_warn_level = '100';
-my $clip_crit_level = '100';
-my $rrd_info = 0;
-my $rrd_age = 0;
 my $text_label = undef;
 my $performance_label = undef;
-my $warn_threshold = '0:';
-my $crit_threshold = '0:';
 my $result = UNKNOWN;
-my $version = '$Revision: 7 $ / wob / $Date: 2008-09-08 13:13:57 +0200 (Mo, 08 Sep 2008) $';
-my $printversion = 0;
-my $verbose = 0;
-my $help = 0;
-my $timeout = 10;
-my $debug = 0;
-
 my $fetch_start;
 my $fetch_step;
 my $fetch_dsnames;
@@ -174,58 +162,34 @@ my %NOTAVAIL = ( 'OK'       => 0,
 		 'CRITICAL' => 2,
 		 'UNKNOWN'  => 0.5,
 	       );
-my $mode   = ''; # cf|age|info
-my $mode_count = 0;		# count of specified possible mode, only 0 or 1 is allowed;
 
-# -- mode
-
-if ($rra_cf) {
-   $mode_count++ ;
-   $mode = 'cf';
-}
-if ($rrd_age) {
-   $mode_count++ ;
-   $mode = 'age';
-}
-if ($rrd_info) {
-   $mode_count++ ;
-   $mode = 'info';
-}
-
-pod2usage(-msg     => "*** please use only of --cf, --info, --age, not more than one ***",
-          -verbose => 0,
-          -exitval => UNKNOWN,
-	) if $mode_count > 1;
-
-if ( "$mode" eq "" ) {
-   $mode = 'cf';
-   $rra_cf = 'AVERAGE';
-}
-
-pod2usage(-msg     => "*** no data source specified ***",
-          -verbose => 0,
-          -exitval => UNKNOWN,
-	) if ( ("$mode" eq "cf") && ("$datasource" eq ""));
-
-$na_values_returncode = $NOTAVAIL{$na_values_returncode};
-
-pod2usage(-msg     => "*** --na-values-returncode: please use one of OK, WARNING, CRITICAL, UNKNOWN ***",
-          -verbose => 0,
-          -exitval => UNKNOWN,
-	) if ( ! defined($na_values_returncode));
-
-pod2usage(-msg     => "*** --compute: please use one of MIN, MAX, AVERAGE, PERCENT ***",
-          -verbose => 0,
-          -exitval => UNKNOWN,
-	) if ( ! grep /^$compute$/, ('MIN', 'MAX', 'AVERAGE', 'PERCENT'));
 
 # -- Alarm
 
-$SIG{ALRM} = sub { $np->nagios_die("Timeout reached"); }; 
-alarm($timeout);
+#$SIG{ALRM} = sub { $np->nagios_die("Timeout reached"); }; 
+alarm($np->opts->timeout);
+
+# -- mode
+
+if ($np->opts->cf) {
+   $mode_count++ ;
+   $mode = 'cf';
+}
+if ($np->opts->age) {
+   $mode_count++ ;
+   $mode = 'age';
+}
+if ($np->opts->info) {
+   $mode_count++ ;
+   $mode = 'info';
+}
+if ( "$mode" eq "" ) {
+   $mode = 'cf';
+}
+
 
 # -- thresholds: no global set_threshold, specify it explizitly in check_threshold
-print "DEBUG: warn= $warn_threshold, crit= $crit_threshold\n" if ($debug);
+print "DEBUG: warn= ".$np->opts->warning.", crit= ".$np->opts->critical."\n" if ($debug);
 
 # -----------------------------------------------------------------------
 # main
@@ -313,17 +277,14 @@ if ( "$mode" eq "age" ) {
    print "time diff = $time_diff \n" if ($debug);
    
    # -- check thresholds
-   $result = $np->check_threshold( check   => $time_diff, 
-				   warning => $warn_threshold, 
-				   critical => $crit_threshold
-			         );
+   $result = $np->check_threshold($time_diff);
    # -- perfdata
    $performance_label = ( defined($performance_label)) ? $performance_label : 'age';
    $np->add_perfdata( label    => $performance_label,
 		      value    => $time_diff,
 		      uom      => 's',
-		      warning  => $warn_threshold,
-		      critical => $crit_threshold,
+		      warning  => $np->opts->warning,
+		      critical => $np->opts->critical,
 		    );
    # -- exit and info
    $text_label = ( defined($text_label)) ? $text_label : 'AGE';
@@ -342,13 +303,13 @@ if ( "$mode" ne "cf" ) {
 }
 
 if ($debug) {
-   print "DEBUG: --start $start_time --end $end_time --resolution $rra_resolution\n";
+   print "DEBUG: --start ".$np->opts->start." --end ".$np->opts->end." --resolution ".$np->opts->resolution."\n";
 }
 
 # -- fetch data and info
 ($fetch_start, $fetch_step, $fetch_dsnames, $fetch_data) 
-= RRDs::fetch("$rrdfile", "$rra_cf", "--start", $start_time,
-	      "--end", $end_time, "--resolution", $rra_resolution);
+= RRDs::fetch("$rrdfile", $np->opts->cf, "--start", $np->opts->start,
+	      "--end", $np->opts->end, "--resolution", $np->opts->resolution);
 
 # -- error handling
 my $ERR=RRDs::error;
@@ -357,13 +318,13 @@ $np->nagios_die( "could not fetch data from $rrdfile: $ERR") if $ERR;
 
 # -- data sources
 for ( my $i = 0; $i <= $#$fetch_dsnames; $i++ ) {
-   if ( "$$fetch_dsnames[$i]" eq "$datasource" ) {
+   if ( "$$fetch_dsnames[$i]" eq $np->opts->ds ) {
       $ds_index = $i;
       last;
    }
 }
 if ( $ds_index == -1 ) {
-   $np->nagios_die( "data source $datasource not found in $rrdfile" );
+   $np->nagios_die( "data source ".$np->opts->ds." not found in $rrdfile" );
 }
 if ($debug) {
    print "DEBUG: data source index is $ds_index\n";
@@ -398,7 +359,8 @@ if ($debug) {
 # exit with na_values_returncode if @ds_values has no content
 
 if ( $#ds_values < 0 ) {
-   $result = ($na_values_returncode != 0.5) ? $na_values_returncode : UNKNOWN; 
+   #$result = ($na_values_returncode != 0.5) ? $na_values_returncode : UNKNOWN;
+   $result = $np->opts->na_values_returncode;
    $text_label = ( defined($text_label)) ? $text_label : '';
    $np->nagios_exit( return_code => $result,
 		     message     => "$text_label no valid values found in $rrdfile"
@@ -412,18 +374,18 @@ my @sorted = ();
 my $computed;
 
 COMPUTE: {
-   if ( ! grep /^$compute$/, ('MIN', 'MAX', 'AVERAGE') ) {
+   if ( ! grep /^$np->opts->compute$/, ('MIN', 'MAX', 'AVERAGE') ) {
       last COMPUTE;
    }
-   if ( "$compute" eq 'MIN' ) {
+   if ( $np->opts->compute eq 'MIN' ) {
       @sorted = sort { $a <=> $b } @ds_values;
       $computed = shift @sorted;
    }
-   if ( "$compute" eq 'MAX' ) {
+   if ( $np->opts->compute eq 'MAX' ) {
       @sorted = sort { $b <=> $a } @ds_values;
       $computed = shift @sorted;
    }
-   if ( "$compute" eq 'AVERAGE' ) {
+   if ( $np->opts->compute eq 'AVERAGE' ) {
       my $sum = 0;
       foreach my $val ( @ds_values ) {
          $sum += $val;
@@ -431,30 +393,25 @@ COMPUTE: {
       $computed = $sum / ($#ds_values + 1);
    }
    # -- check thresholds
-   $result = $np->check_threshold( check   => $computed, 
-				   warning => $warn_threshold, 
-				   critical => $crit_threshold
-				  );
+   $result = $np->check_threshold($computed);
    # -- na values?
    if ( $notavailable ) {
-      $result = ($result >= $na_values_returncode) ? $result 
-	      : ($na_values_returncode != 0.5)     ? $na_values_returncode
-	      :					  UNKNOWN
-	      ;
+      #$result = ($result >= $na_values_returncode) ? $result : ($na_values_returncode != 0.5)     ? $na_values_returncode :UNKKNOWN  ;
+      $result = $np->opts->na_values_returncode;
    }
 
    # -- perfdata
    $performance_label = ( defined($performance_label)) 
 		      ? $performance_label 
-		      : $datasource . "." . $rra_cf . "." . lc($compute)
+		      : $np->opts->ds . "." . $np->opts->cf . "." . lc($np->opts->compute)
 		      ;
    $np->add_perfdata( label    => $performance_label,
 		      value    => $computed,
-		      warning  => $warn_threshold,
-		      critical => $crit_threshold,
+		      warning  => $np->opts->warning,
+		      critical => $np->opts->critical,
 		    );
    # -- exit and info
-      $text_label = defined($text_label) ? $text_label : $compute;
+      $text_label = defined($text_label) ? $text_label : $np->opts->compute;
    $np->nagios_exit( return_code => $result,
 		     message     => "$text_label: $computed"
 		   );
@@ -465,43 +422,34 @@ COMPUTE: {
 # compute = PERCENT
 
 my $sum_all = $#ds_values + 1 + $notavailable;
-my $sum_ok  = ($na_values_returncode == 0) ? $notavailable : 0;
+#my $sum_ok  = ($na_values_returncode == 0) ? $notavailable : 0;
+my $sum_ok  = $notavailable;
 
 foreach my $val ( @ds_values ) {
    # -- check thresholds
-   my $what = $np->check_threshold( check   => $val, 
-				    warning => $warn_threshold, 
-				    critical => $crit_threshold,
-			          );
+   my $what = $np->check_threshold($val);
    print "DEBUG: percent: $val -> $what\n" if ($debug); 
    $sum_ok += 1 unless ($what);
 }
 
-my $percent_ok = ($sum_ok/$sum_all) * 100;
+my $percent_ok = nearest(.1, (100*$sum_ok/$sum_all));
 
 # -- check thresholds
-$result = $np->check_threshold( check   => $percent_ok,
-				warning => $clip_warn_level,
-				critical => $clip_crit_level,
-			      );
+$result = $np->check_threshold($percent_ok);
 # -- perfdata
 $performance_label = ( defined($performance_label)) 
                    ? $performance_label 
-		   : $datasource . "." . $rra_cf . "." . lc($compute)
+		   : $np->opts->ds . "." . $np->opts->cf . "." . lc($np->opts->compute)
 		   ;
 $np->add_perfdata( label    => $performance_label,
 		   value    => $percent_ok,
 		   uom	    => '%',
-		   warning  => $clip_warn_level,
-		   critical => $clip_crit_level,
+		   warning  => $np->opts->clip_warn_level,
+		   critical => $np->opts->clip_crit_level,
 		 );
 # -- exit and info
-   $text_label = ( defined($text_label)) ? $text_label : 'Values ok: ';
+$text_label = ( defined($text_label)) ? $text_label : 'Values ok: ';
 $np->nagios_exit( return_code => $result,
 		  message     => "$text_label $percent_ok%"
 		);
 
-# ----------------------------------------
-# reset alarm
-
-alarm(0);
