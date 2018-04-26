@@ -149,9 +149,11 @@ my $mode = ''; # cf|age|info
 my $mode_count = 0;		# count of specified possible mode, only 0 or 1 is allowed;
 my $debug = $np->opts->debug;
 my $ds_index = -1;
+my $na_values_returncode;
 my $text_label = undef;
 my $performance_label = undef;
 my $result = UNKNOWN;
+my $compute = $np->opts->compute;
 my $fetch_start;
 my $fetch_step;
 my $fetch_dsnames;
@@ -187,7 +189,20 @@ if ( "$mode" eq "" ) {
    $mode = 'cf';
 }
 
+if ($mode_count > 1) {
+	$np->nagios_die("Please use only one of these option --cf, --info, --age, not more than one!");
+}
 
+$na_values_returncode = $NOTAVAIL{$np->opts->na_values_returncode};
+
+if ( ! defined($na_values_returncode)) {
+	    $np->nagios_die("--na-values-returncode: please use one of OK, WARNING, CRITICAL, UNKNOWN");
+
+}
+
+if ( ! grep /^$compute$/, ('MIN', 'MAX', 'AVERAGE', 'PERCENT')) {
+	    $np->nagios_die("--compute: please use one of MIN, MAX, AVERAGE, PERCENT. You had ".$np->opts->compute);
+}
 # -- thresholds: no global set_threshold, specify it explizitly in check_threshold
 print "DEBUG: warn= ".$np->opts->warning.", crit= ".$np->opts->critical."\n" if ($debug);
 
@@ -302,6 +317,10 @@ if ( "$mode" ne "cf" ) {
    $np->nagios_die("unknown mode $mode, should be cf, info or age");
 }
 
+if ((! defined ($np->opts->ds)) || ($np->opts->ds eq "")) {
+   $np->nagios_die('No data source specified! Use --info to list data source names of the rrd file and --ds to specify data source.');
+}
+
 if ($debug) {
    print "DEBUG: --start ".$np->opts->start." --end ".$np->opts->end." --resolution ".$np->opts->resolution."\n";
 }
@@ -374,7 +393,7 @@ my @sorted = ();
 my $computed;
 
 COMPUTE: {
-   if ( ! grep /^$np->opts->compute$/, ('MIN', 'MAX', 'AVERAGE') ) {
+   if ( ! grep /^$compute$/, ('MIN', 'MAX', 'AVERAGE') ) {
       last COMPUTE;
    }
    if ( $np->opts->compute eq 'MIN' ) {
