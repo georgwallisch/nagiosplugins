@@ -55,7 +55,7 @@ my $printer_type = undef;
 # Constructor of core monitoring object
 my $np = Monitoring::Plugin->new(
 	usage => "Usage: %s -H <host> [-C <community>] [-P <snmp_version>] [-s <supply>] [-t <timeout>] [ -c|--critical=<threshold> ] [ -w|--warning=<threshold> ]",
-	version => '0.2',
+	version => '0.5',
 	blurb => 'This plugin checks a printer for its supply status values',
 	);
 
