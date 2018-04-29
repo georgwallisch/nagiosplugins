@@ -33,7 +33,7 @@
 use warnings;
 use POSIX qw(strftime);
 
-use Monitoring::Plugin qw(%ERRORS);
+use Monitoring::Plugin qw(%ERRORS %STATUS_TEXT);
 use Math::Round qw(nearest);
 use RRDs;
 
@@ -137,7 +137,7 @@ $np->add_arg(
 	default => 0,
 	);
 $np->add_arg(
-	spec => 'round|f',
+	spec => 'round|prec|precision=f',
 	help => 'Rounds the values to the nearest multiple of the target value. e.g. 0.1',
 	);
 
@@ -163,12 +163,6 @@ my $fetch_step;
 my $fetch_dsnames;
 my $fetch_data;
 my $notavailable = 0;
-my %NOTAVAIL = ( 'OK'       => 0,
- 		 'WARNING'  => 1,
-		 'CRITICAL' => 2,
-		 'UNKNOWN'  => 0.5,
-	       );
-
 
 # -- Alarm
 
@@ -189,11 +183,10 @@ if ($mode_count > 1) {
 	$np->nagios_die("Please use only one of these option --cf, --info, --age, not more than one!");
 }
 
-$na_values_returncode = $NOTAVAIL{$np->opts->na_values_returncode};
+$na_values_returncode = $ERRORS{$np->opts->na_values_returncode};
 
 if ( ! defined($na_values_returncode)) {
 	    $np->nagios_die("--na-values-returncode: please use one of OK, WARNING, CRITICAL, UNKNOWN");
-
 }
 
 if ( ! grep /^$compute$/, ('MIN', 'MAX', 'AVERAGE', 'PERCENT')) {
@@ -211,6 +204,11 @@ if ($debug) {
 		print "DEBUG: crit= ".$np->opts->critical."\n";	
 	} else {
 		print "DEBUG: critical threshold not set\n" ;
+	}
+	if (defined($np->opts->round)) {
+		print "DEBUG: Rounding values to ".$np->opts->round."\n";	
+	} else {
+		print "DEBUG: No rounding. Showing full precision.\n" ;
 	}
 }
 
@@ -386,7 +384,6 @@ if ($debug) {
 # exit with na_values_returncode if @ds_values has no content
 
 if ( $#ds_values < 0 ) {
-   #$result = ($na_values_returncode != 0.5) ? $na_values_returncode : UNKNOWN;
    $result = $np->opts->na_values_returncode;
    $text_label = ( defined($text_label)) ? $text_label : '';
    $np->nagios_exit( return_code => $result,
@@ -418,19 +415,21 @@ COMPUTE: {
          $sum += $val;
       }
       $computed = $sum / ($#ds_values + 1);
-      
-      if ( defined($np->opts->round) ) {
-      	  $computed = nearest( $np->opts->round, $computed);
-      }
+   }
+   if ( defined( $np->opts->round ) ) {
+   	   $computed = nearest( $np->opts->round, $computed );
    }
    # -- check thresholds
    $result = $np->check_threshold($computed);
-   # -- na values?
+   print "DEBUG: Result is $result (".$STATUS_TEXT{$result}.")\n" if ($debug);
+   
+   # -- do we have na values?
    if ( $notavailable ) {
-      #$result = ($result >= $na_values_returncode) ? $result : ($na_values_returncode != 0.5)     ? $na_values_returncode :UNKKNOWN  ;
-      $result = $np->opts->na_values_returncode;
+      $result = ($result >= $na_values_returncode) ? $result : $na_values_returncode;
+      #$result = $np->opts->na_values_returncode;
+      print "DEBUG: N/A Values! Set result to $result (".$STATUS_TEXT{$result}.")\n" if ($debug);
    }
-
+   
    # -- perfdata
    $performance_label = ( defined($performance_label)) 
 		      ? $performance_label 
@@ -453,17 +452,20 @@ COMPUTE: {
 # compute = PERCENT
 
 my $sum_all = $#ds_values + 1 + $notavailable;
-#my $sum_ok  = ($na_values_returncode == 0) ? $notavailable : 0;
-my $sum_ok  = $notavailable;
+my $sum_ok  = ($na_values_returncode == 0) ? $notavailable : 0;
 
 foreach my $val ( @ds_values ) {
    # -- check thresholds
    my $what = $np->check_threshold($val);
-   print "DEBUG: percent: $val -> $what\n" if ($debug); 
+   print "DEBUG: percent: $val -> $what (".$STATUS_TEXT{$what}.")\n" if ($debug); 
    $sum_ok += 1 unless ($what);
 }
 
-my $percent_ok = nearest(.1, (100*$sum_ok/$sum_all));
+my $percent_ok = ($sum_ok/$sum_all) * 100;
+
+if ( defined( $np->opts->round ) ) {
+   $computed = nearest( $np->opts->round, $percent_ok );
+}
 
 # -- check thresholds
 $result = $np->check_threshold($percent_ok);
