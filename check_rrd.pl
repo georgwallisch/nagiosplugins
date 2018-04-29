@@ -136,6 +136,10 @@ $np->add_arg(
 	help => 'Enable Debug mode.',
 	default => 0,
 	);
+$np->add_arg(
+	spec => 'round|f',
+	help => 'Rounds the values to the nearest multiple of the target value. e.g. 0.1',
+	);
 
 # -- Parse and process arguments
 $np->getopts;
@@ -145,7 +149,7 @@ $np->getopts;
 # -----------------------------------------------
 
 my $rrdfile = $np->opts->rrdfile;
-my $mode = ''; # cf|age|info
+my $mode = 'cf'; # cf|age|info
 my $mode_count = 0;		# count of specified possible mode, only 0 or 1 is allowed;
 my $debug = $np->opts->debug;
 my $ds_index = -1;
@@ -172,11 +176,6 @@ my %NOTAVAIL = ( 'OK'       => 0,
 alarm($np->opts->timeout);
 
 # -- mode
-
-if ($np->opts->cf) {
-   $mode_count++ ;
-   $mode = 'cf';
-}
 if ($np->opts->age) {
    $mode_count++ ;
    $mode = 'age';
@@ -184,9 +183,6 @@ if ($np->opts->age) {
 if ($np->opts->info) {
    $mode_count++ ;
    $mode = 'info';
-}
-if ( "$mode" eq "" ) {
-   $mode = 'cf';
 }
 
 if ($mode_count > 1) {
@@ -204,7 +200,19 @@ if ( ! grep /^$compute$/, ('MIN', 'MAX', 'AVERAGE', 'PERCENT')) {
 	    $np->nagios_die("--compute: please use one of MIN, MAX, AVERAGE, PERCENT. You had ".$np->opts->compute);
 }
 # -- thresholds: no global set_threshold, specify it explizitly in check_threshold
-print "DEBUG: warn= ".$np->opts->warning.", crit= ".$np->opts->critical."\n" if ($debug);
+if ($debug) {
+	if (defined($np->opts->warning)) {
+		print "DEBUG: warn= ".$np->opts->warning."\n" ;
+	} else {
+		print "DEBUG: warning threshold not set\n" ;
+	}
+	
+	if (defined($np->opts->critical)) {
+		print "DEBUG: crit= ".$np->opts->critical."\n";	
+	} else {
+		print "DEBUG: critical threshold not set\n" ;
+	}
+}
 
 # -----------------------------------------------------------------------
 # main
@@ -410,6 +418,10 @@ COMPUTE: {
          $sum += $val;
       }
       $computed = $sum / ($#ds_values + 1);
+      
+      if ( defined($np->opts->round) ) {
+      	  $computed = nearest( $np->opts->round, $computed);
+      }
    }
    # -- check thresholds
    $result = $np->check_threshold($computed);
