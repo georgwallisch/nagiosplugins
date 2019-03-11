@@ -140,11 +140,14 @@ if($np->opts->list) {
 	printf "\nAvailable supply values on Host $host:\n";
 	$result = $session->get_request($printer_type_oid);
 	if(ref($result) eq 'HASH' and defined $result->{$printer_type_oid}) {
-		$printer_type = $result->{$printer_type_oid};	
+		$printer_type = $result->{$printer_type_oid};
+		printf "\nTYPE: $printer_type\n";
+	} else {
+		printf "\nERROR: Could not determine type of that printer!\n";
 	}
 	
 	$session->close;
-	printf "\nTYPE: $printer_type\n";
+
 	for $item (@valuelist) {
 		#if(ref($item) eq 'HASH') {
 			print "\n- (",$item->{i} ,") ", $item->{value};
