@@ -8,13 +8,13 @@ __author__ = "Georg Wallisch"
 __contact__ = "gw@phpco.de"
 __copyright__ = "Copyright © 2019 by Georg Wallisch"
 __credits__ = ["Georg Wallisch"]
-__date__ = "2019/09/03"
+__date__ = "2019/09/07"
 __deprecated__ = False
 __email__ =  "gw@phpco.de"
 __license__ = "open source software"
 __maintainer__ = "Georg Wallisch"
 __status__ = "alpha"
-__version__ = "0.1"
+__version__ = "0.2"
 
 
 import re, os, rrdtool, time, sys
@@ -58,8 +58,8 @@ def main():
 						  help='create new round-robin database')
 		argp.add_argument('-c','--continuous', action="store_true",
 						  help='Continuously reading system temperature and storing to rrd. Using --step as loop delay.')		
-		argp.add_argument('--read-test', action="store_true",
-						  help='just read cpu temp until Ctrl+C without using a RRD anyway.')
+#		argp.add_argument('--read-test', action="store_true",
+#						  help='just read cpu temp until Ctrl+C without using a RRD anyway.')
 		args = argp.parse_args()
 #		rrd_path = os.path.abspath(os.path.join(os.path.dirname(__file__),'..','rrd'))
 #		raum_rrd = os.path.join(rrd_path, 'apo_raum1.rrd')
@@ -97,18 +97,19 @@ def main():
 					"RRA:MIN:0.5:{0}:365".format(a*288),
 					"RRA:MAX:0.5:{0}:365".format(a*288))
 				print("Done.")
-		elif args.read_test:
-			print("Start reading...")
-			while True:
-				print("{0} °C".format(read_cputemp()))
-				time.sleep(5)		
+#		elif args.read_test:
+#			print("Start reading...")
+#			while True:
+#				print("{0} °C".format(read_cputemp()))
+#				time.sleep(5)		
 		else:
 			if os.path.isfile(args.rrdfile):
 				
 				if args.continuous:
 					print("Starting continuous reading system temperatue every {0} seconds".format(step))
-					update_rrd(args.rrdfile)		
-					time.sleep(step)
+					while True:
+						update_rrd(args.rrdfile)		
+						time.sleep(step)
 				else:
 					print("Just once reading system temperatue")
 					update_rrd(args.rrdfile)
