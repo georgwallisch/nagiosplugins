@@ -41,11 +41,13 @@ def read_cputemp():
 		exc_type, exc_obj, exc_tb = sys.exc_info()
 		fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
 		print("Unexpected error: ",exc_type, fname, exc_tb.tb_lineno)
+		
 def update_rrd(rrdfile):
 	t = read_cputemp()
 	if t is not None:
 		data = "N:{0:0.1f}".format(t)	
 		rrdtool.update(rrdfile, data)
+		return t
 
 def main():
 	try:
@@ -58,6 +60,7 @@ def main():
 						  help='create new round-robin database')
 		argp.add_argument('-c','--continuous', action="store_true",
 						  help='Continuously reading system temperature and storing to rrd. Using --step as loop delay.')		
+		argp.add_argument("-v", "--verbose", action="store_true")
 #		argp.add_argument('--read-test', action="store_true",
 #						  help='just read cpu temp until Ctrl+C without using a RRD anyway.')
 		args = argp.parse_args()
@@ -65,12 +68,16 @@ def main():
 #		raum_rrd = os.path.join(rrd_path, 'apo_raum1.rrd')
 
 		if args.step > 300:
-			print("Step size {0} is too large! Reducing to maximum of 300 seconds.".format(args.step))
+			if args.verbose:
+				print("Step size {0} is too large! Reducing to maximum of 300 seconds.".format(args.step))
 			step = 300
 		elif args.step < 10:
-			print("Step size {0} is too small! In order not to poll thermal data file too often producing too much system load setting step size to minimum of 10 seconds.".format(args.step))
+			if args.verbose:
+				print("Step size {0} is too small! In order not to poll thermal data file too often producing too much system load setting step size to minimum of 10 seconds.".format(args.step))
 			step = 10
 		else:
+			if args.verbose:
+				print("Step size is set to {0} seconds.".format(args.step))
 			step = args.step
 			
 		if args.create:
@@ -108,11 +115,17 @@ def main():
 				if args.continuous:
 					print("Starting continuous reading system temperatue every {0} seconds".format(step))
 					while True:
-						update_rrd(args.rrdfile)		
+						t = update_rrd(args.rrdfile)
+						if args.verbose:
+							if t is not None:
+								print("{0} °C".format(t))
+							else:
+								print("---")
 						time.sleep(step)
 				else:
-					print("Just once reading system temperatue")
-					update_rrd(args.rrdfile)
+					t = update_rrd(args.rrdfile)
+					print("Just once reading system temperatue: {0} °C".format(t))
+					
 			else:
 				print("Cannot access {0}! File does not exist!".format(args.rrdfile))
 
