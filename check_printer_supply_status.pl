@@ -89,6 +89,23 @@ $np->add_arg(
 	help => "Supply name to query. This is REGEX parameter. So just try querying 'black' or 'drum'.",
 	);
 $np->add_arg(
+	spec => 'entry|n=i',
+	help => "Entry number as listed to query. Use --list or -l to list all available supply values.",
+	);
+$np->add_arg(
+	spec => 'csvdump|csv',
+	help => "Print list as a comma separated list. Only to use with --list or -l.",
+	);
+$np->add_arg(
+	spec => 'csv_separator=s',
+	help => "CSV Separator character. default ';'",
+	default => ';',
+	);
+$np->add_arg(
+	spec => 'dont_strip_sn',
+	help => "Usually a serial number provided in a suply value is stripped. Use this option to keep the S/N.",
+	);
+$np->add_arg(
 	spec => 'warning|w=s',
 	help => 'Warning Threshold. See https://www.monitoring-plugins.org/doc/guidelines.html#THRESHOLDFORMAT for the threshold format. ',
 	);
@@ -102,6 +119,8 @@ $np->getopts;
 
 my $host 	= $np->opts->hostname;
 my $supply = $np->opts->supply;
+my $entry = $np->opts->entry;
+my $separator = $np->opts->csv_separator;
 
 alarm($np->opts->timeout);
 
@@ -120,6 +139,7 @@ my $i;
 my $used;
 my $capacity;
 my $type = undef;
+my $value;
 	
 for ($i = 1; $i < 11; $i++) { 
 	$oid = $base_oid.$supply_type_oid.'.'.$i;
@@ -127,7 +147,11 @@ for ($i = 1; $i < 11; $i++) {
 	$result = $session->get_request($oid);
 	
 	if(ref($result) eq 'HASH' and defined $result->{$oid}) {
-		%data = (oid => $oid, i => $i, value => $result->{$oid});
+		$value = $result->{$oid};
+		unless($np->opts->dont_strip_sn) {
+			$value =~ s/\s*S\/?N\:?.*//i
+		}
+		%data = (oid => $oid, i => $i, value => $value);
 		push(@valuelist, {%data});
 	}
 }
@@ -137,37 +161,73 @@ if($np->opts->list) {
 	#use Data::Dumper;
 	#print Dumper(@valuelist);
 	
-	printf "\nAvailable supply values on Host $host:\n";
 	$result = $session->get_request($printer_type_oid);
 	if(ref($result) eq 'HASH' and defined $result->{$printer_type_oid}) {
 		$printer_type = $result->{$printer_type_oid};
-		printf "\nTYPE: $printer_type\n";
-	} else {
-		printf "\nERROR: Could not determine type of that printer!\n";
 	}
-	
 	$session->close;
+	
+	if($np->opts->csvdump) {
+		
+		for $item (@valuelist) {
+			print $host.$separator;
+			print $printer_type.$separator;
+			print $item->{oid}.$separator;
+			print $item->{i}.$separator;
+			print $item->{value}."\n";
+		}
+	
+		exit $ERRORS{'OK'}
 
-	for $item (@valuelist) {
-		#if(ref($item) eq 'HASH') {
-			print "\n- (",$item->{i} ,") ", $item->{value};
-		#}
+
+	} else {
+	
+		printf "\nAvailable supply values on Host $host:\n";
+
+		if(defined $printer_type) {
+			printf "\nTYPE: $printer_type\n";
+		} else {
+			printf "\nERROR: Could not determine type of that printer!\n";
+		}
+	
+		for $item (@valuelist) {
+			#if(ref($item) eq 'HASH') {
+				print "\n- (",$item->{i} ,") ", $item->{value};
+			#}
+			if ($np->opts->verbose) {
+				print " (OID: ",$item->{oid},")";
+			}
+		}
+		printf "\n\n\n";
+		$np->plugin_die("That's it!"); 
 	}
-	printf "\n\n\n";
-	$np->plugin_die("That's it!"); 
 }
 
 
 $i = undef;
 
-$np->plugin_die("No supply value given!") unless (defined $supply and $supply ne "");
-
-for $item (@valuelist) {
-	if($item->{value} =~ /$supply/i) {
-		$i = $item->{i};
-		$type = $item->{value};
-		last;
+if(defined $entry and $entry > 0) {
+	for $item (@valuelist) {
+		if($item->{i} == $entry) {
+			$i = $item->{i};
+			$type = $item->{value};
+			last;
+		}
 	}
+	$np->plugin_die("There is no supply entry number '".$entry."' for this host") unless (defined $i and $i > 0);
+
+} elsif(defined $supply and $supply ne "") {
+	for $item (@valuelist) {
+		if($item->{value} =~ /$supply/i) {
+			$i = $item->{i};
+			$type = $item->{value};
+			last;
+		}
+	}
+	$np->plugin_die("There is no supply value like '".$supply."' for this host") unless (defined $i and $i > 0);
+	
+} else {
+	$np->plugin_die("No valid supply value given! Use option -s or -n to define value to query!");
 }
 
 $np->plugin_die("Supply value not available for this host") unless (defined $i and $i > 0);
