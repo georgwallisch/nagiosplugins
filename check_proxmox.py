@@ -160,8 +160,8 @@ class ProxmoxMemoryUsage(Proxmox):
 					mem = round(i['mem'] / (1024 * 1024), 1)
 					pct = round(i['mem'] / i['maxmem'] * 100, 2)
 					_log.debug('Memory rate is: %f', pct)
-					return [nagiosplugin.Metric('mem_usage_total', mem, uom='MiB', min=0, context='memory_usage'),
-						nagiosplugin.Metric('mem_usage_rate', pct, uom='%', min=0, context='memory_usage')] 
+					return [nagiosplugin.Metric('mem_usage_total', mem, uom='MiB', min=0),
+						nagiosplugin.Metric('mem_usage_rate', pct, uom='%', min=0)] 
 		
 class ProxmoxSubscription(Proxmox):
 	
@@ -254,7 +254,7 @@ def main():
 		if args.service:
 			check = nagiosplugin.Check(ProxmoxService(args.host, args.username, args.password, args.node, args.service, args.verify_ssl), ProxmoxContext('service_status'))
 		elif args.mem_usage:
-			check = nagiosplugin.Check(ProxmoxMemoryUsage(args.host, args.username, args.password, args.node, args.verify_ssl), nagiosplugin.ScalarContext('memory_usage', args.warning, args.critical, fmt_metric='Memory usage of node {0}'.format(args.node)))
+			check = nagiosplugin.Check(ProxmoxMemoryUsage(args.host, args.username, args.password, args.node, args.verify_ssl), nagiosplugin.ScalarContext('mem_usage_rate', args.warning, args.critical, fmt_metric='Memory usage rate of node {0}'.format(args.node)),  nagiosplugin.ScalarContext('mem_usage_total', fmt_metric='Memory usage total of node {0}'.format(args.node)))
 		elif args.sub_status:
 			check = nagiosplugin.Check(ProxmoxSubscription(args.host, args.username, args.password, args.node, args.verify_ssl), ProxmoxContext('subscription_status'))
 		elif args.name:
