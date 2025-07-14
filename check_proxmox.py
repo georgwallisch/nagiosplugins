@@ -25,7 +25,7 @@ import nagiosplugin
 import logging
 
 
-logging.basicConfig(stream=sys.stdout, encoding='utf-8')
+logging.basicConfig(stream=sys.stdout) #, encoding='utf-8'
 _log = logging.getLogger(__name__)
 LOG_LEVELS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
 
@@ -43,16 +43,20 @@ class ProxmoxContext(nagiosplugin.Context):
 			_log.debug('Metric value is NONE!')
 			return self.result_cls(nagiosplugin.Unknown, None, metric)
 		elif self.name == 'subscription_status':
-			if metric.value == "Active":			
+			if metric.value == "Active":
+				self.fmt_metric = 'Subscription Status is active'
 				_log.debug('Subscription seems to be active')
 				return self.result_cls(nagiosplugin.Ok, None, metric)
 			elif metric.value == "notfound":
+				self.fmt_metric = 'No active Subscription found!'
 				_log.debug('There is no active subscription!')
 				return self.result_cls(nagiosplugin.Warn, None, metric)
 			else:
+				self.fmt_metric = 'Subscription is unknown?!'
 				_log.debug('Dunno what subscription status is!')
 				return self.result_cls(nagiosplugin.Unknown, None, metric)
 		elif self.name == 'node_status':
+			self.fmt_metric = 'Node Status'
 			if metric.value == 1:
 				_log.debug('Node seems to be online')
 				return self.result_cls(nagiosplugin.Ok, None, metric)
@@ -60,6 +64,7 @@ class ProxmoxContext(nagiosplugin.Context):
 				_log.debug('Node seems to be offline!')
 				return self.result_cls(nagiosplugin.Crit, None, metric)
 		elif self.name == 'service_status':
+			self.fmt_metric = 'Service Status'
 			if metric.value == 1:
 				_log.debug('Service seems to be online')
 				return self.result_cls(nagiosplugin.Ok, None, metric)
