@@ -194,6 +194,24 @@ class ProxmoxVM(Proxmox):
 				return [nagiosplugin.Metric('vm_status', s['status'])]
 		_log.info('VM %s (%i) not found!', self.vmname, self.vmid)
 		return [nagiosplugin.Metric('vm_status', None)]
+		
+class ProxmoxUpdates(Proxmox):
+	
+	def __init__(self, host, username, password, node, verify_ssl=False):
+		super().__init__(host, username, password, node, verify_ssl)		
+		
+	def probe(self):
+		_log.info('Checking apt/updates of node: %s', self.node)
+		
+		optional = 0
+		total = 0
+		for s in self.proxmox.nodes(self.node).apt.update.get():
+			total += 1
+			if 'Priority' in s and s['Priority'] == 'optional':
+				optional += 1
+		updates = total - optional			
+		_log.info('Found %i updates (containing %i optinal', total, optional)
+		return [nagiosplugin.Metric('updates_total', total), nagiosplugin.Metric('updates_optional', optional), nagiosplugin.Metric('updates_normal', updates)]
 
 @nagiosplugin.guarded
 def main():
@@ -214,6 +232,7 @@ def main():
 		argp.add_argument('-v', '--verbose', action='count', default=0, help='increase output verbosity (use up to 3 times)')
 		argp.add_argument('-i', '--vmid', metavar='VMID', help='Virtual Machine ID (vmid) to check')
 		argp.add_argument('-n', '--name', metavar='NAME', help='Virtual Machine name to check')
+		argp.add_argument('-a', '--updates', action='store_true', help='Check for updates')
 		argp.add_argument('--list-nodes', action='store_true', help='List all nodes')
 		argp.add_argument('--list-vms', action='store_true', help='List all virtual machines on node')
 		argp.add_argument('--list-services', action='store_true', help='List all services')
@@ -257,6 +276,8 @@ def main():
 			check = nagiosplugin.Check(ProxmoxMemoryUsage(args.host, args.username, args.password, args.node, args.verify_ssl), nagiosplugin.ScalarContext('mem_usage_rate', args.warning, args.critical, fmt_metric='Memory usage rate of node {0}'.format(args.node)),  nagiosplugin.ScalarContext('mem_usage_total', fmt_metric='Memory usage total of node {0}'.format(args.node)))
 		elif args.sub_status:
 			check = nagiosplugin.Check(ProxmoxSubscription(args.host, args.username, args.password, args.node, args.verify_ssl), ProxmoxContext('subscription_status'))
+		elif args.updates:
+			check = nagiosplugin.Check(ProxmoxUpdates(args.host, args.username, args.password, args.node, args.verify_ssl), nagiosplugin.ScalarContext('updates_total', warning=1, fmt_metric='Total updates of node {0}'.format(args.node)), nagiosplugin.ScalarContext('updates_normal', critical=1, fmt_metric='Normal updates of node {0}'.format(args.node)), nagiosplugin.ScalarContext('updates_optional', warning=1, fmt_metric='Optional updates of node {0}'.format(args.node)))
 		elif args.name:
 			_log.debug("VM Name is set to {0}".format(args.vmname))
 			check = nagiosplugin.Check(ProxmoxVM(args.host, args.username, args.password, args.node, vmname=args.name, verify_ssl=args.verify_ssl), ProxmoxContext('vm_status'))
